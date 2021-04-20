@@ -6,10 +6,8 @@ from os import getenv, environ
 import random as rnd
 import math
 
-# Holds all relevant maps that will be processed by the CNN
-class GameState:
-    
-    # Empty gamestate with two initialization options
+class SimulatedGame():
+
     def __init__(self, previous_state=None, replay_filename=None):
         self.map_dimensions = []
         self.players = []
@@ -18,66 +16,50 @@ class GameState:
         self.generals = []
         self.armies = []
         self.turn = 0
-        if previous_state is not None:
-            self.transfer_from_previous(previous_state)
-        elif replay_filename is not None:
-            self.initialize_from_replay_file(replay_filename)
-        else:
+        self.initialize_randomly()
+        while not self.screen_map():
             self.initialize_randomly()
-            while not self.screen_map():
-                self.initialize_randomly()
-       
-    def set_map_dimensions(self,dimensions):
-        self.map_dimensions = dimensions
-    
 
+    def initialize_randomly(self):
+        num_players = 2
+        width = 16 + num_players + round((rnd.random()**2) * (4 + (num_players / 2)))
+        height = 16 + num_players + round((rnd.random()**2) * (4 + (num_players / 2)))
+        map_size = width * height
+        self.map_dimensions = [height, width]
+        self.players = [CNNAgent(), CNNAgent()]
+        self.cities = np.zeros(map_size)
+        self.mountains = np.zeros(map_size)
+        self.generals = np.zeros(map_size)
+        self.armies = np.zeros(map_size)
+        for i in range(num_players):
+            index = rnd.randrange(map_size)
+            self.generals[index] = i
+            self.armies[index] = 1
+        for i in range(map_size):
+            if rnd.random() < 0.15 and self.generals[i] == 0:
+                self.mountains[i] = 1
+            elif rnd.random() < 0.1 and self.generals[i] == 0:
+                self.cities[i] = 1
+                self.armies[i] = rnd.randrange(35, 50)
     
-    # Copy a gamestate's parameters to the current instance   
-    def transfer_from_previous(self, previous_state):
-        if previous_state is not None:
-            self.map_dimensions, self.players, self.cities, self.mountains, self.generals ,self.armies = \
-                previous_state.map_dimensions, previous_state.players, previous_state.cities, \
-                previous_state.mountains, previous_state.generals, previous_state.armies
-    
-    # Initialize the gamestate from a .gioreplay file at turn 0 
-    def initialize_from_replay_file(self, replay_filename):
-        try:
-            input_file = open(replay_filename, 'r')
-        except IOError:
-            return
-        try:
-            data = json.load(input_file)
-            # Dimensions
-            self.map_dimensions = [data['mapHeight'], data['mapWidth']]
-            # Players
-            for i in range(len(data['usernames'])):
-                name = data['usernames'][i]
-                stars = data['stars'][i]
-                self.players.append(Player(name,stars))
-            # Cities
-            self.cities = self.indices_to_map_positions(data['cities'])
-            # Mountains
-            self.mountains = self.indices_to_map_positions(data['mountains'])
-            # Generals
-            self.generals = self.indices_to_map_positions(data['generals'])
-            # Neutral armies
-            self.armies.append(self.indices_to_map_positions(data['cities'],data['cityArmies']))
-            # Player armies
-            for i in range(len(self.players)):
-                self.armies.append(self.indices_to_map_positions([data['generals'][i]]))
-            input_file.close()
-        except:
-            input_file.close()
-    
-    # Map a list of indices in the gioreplay file to numpy arrays for convolutional network analysis
-    def indices_to_map_positions(self, indices, values=[]):
-        list_length = self.map_dimensions[0]*self.map_dimensions[1]
-        output = np.zeros(list_length)
-        if len(values) == 0:
-            values = [1]*len(indices)
+    def screen_map(self):
+        indices = []
+        for i in range(self.map_dimensions[0] * self.map_dimensions[1]):
+            if self.generals[i] > 0:
+                indices.append(i)
         for i in range(len(indices)):
-            output[indices[i]] = values[i]
-        return np.reshape(output, (self.map_dimensions[0], self.map_dimensions[1]))
+            general = self.generals[i]
+            row = math.floor(general / self.map_dimensions[1])
+            col = general % self.map_dimensions[1]
+            other_generals = self.generals[0:max(i,1)] + self.generals[min(i+1,len(self.generals)-1):len(self.generals)]
+            for other_general in other_generals:
+                other_row = math.floor(other_general / self.map_dimensions[1])
+                other_col = other_general % self.map_dimensions[1]
+                distance = np.linalg.norm(np.array((row,col)) - np.array((other_row,other_col)))
+                min_distance = 0.25 * np.linalg.norm(np.array((self.map_dimensions[0],self.map_dimensions[1])) - np.array((0,0)))
+                if distance < min_distance:
+                    return False
+        return True
     
     # Take a list of dict objects representing each players' action in a turn, and update the
     # maps and players accordingly
@@ -124,7 +106,17 @@ class GameState:
             # If army sizes are identical, enemy maintains 0.1 army for recordkeeping (can grow later)
             else:
                 self.armies[enemy_army_index] = np.subtract(self.armies[enemy_army_index], end_position * (enemy_army_size - 0.1))
-    
+                
+    # Map a list of indices in the gioreplay file to numpy arrays for convolutional network analysis
+    def indices_to_map_positions(self, indices, values=[]):
+        list_length = self.map_dimensions[0]*self.map_dimensions[1]
+        output = np.zeros(list_length)
+        if len(values) == 0:
+            values = [1]*len(indices)
+        for i in range(len(indices)):
+            output[indices[i]] = values[i]
+        return np.reshape(output, (self.map_dimensions[0], self.map_dimensions[1]))
+                
     # Handle the entire turn, including player actions and periodic army gains
     def handle_turn(self, turn, moves):
         self.process_player_moves(moves)
@@ -174,3 +166,15 @@ class GameState:
                     if 0 <= j < matrix_dimensions[0] and 0 <= k < matrix_dimensions[1]:
                         output_matrix[j][k] = 1
         return output_matrix
+    
+    # TODO
+    @staticmethod
+    def get_diff(old_matrix, new_matrix):
+        old_array = np.array(old_matrix).flatten()
+        new_array = np.array(new_matrix).flatten()
+        output = []
+        for i in range(new_array.size):
+            if i < new_array.size:
+                if i < old_array.size:
+                    
+        return output

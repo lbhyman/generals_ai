@@ -1,4 +1,7 @@
 import unittest
+import sys
+import os
+sys.path.append(os.path.abspath('../'))
 from game_state import GameState
 import numpy as np
 

@@ -1,6 +1,5 @@
 import urllib.request
 from pyquery import PyQuery
-import glob
 import os
 
 BASE_URL = 'https://generalsio-replays-bot.s3.amazonaws.com/'

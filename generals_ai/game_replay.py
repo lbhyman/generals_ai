@@ -3,9 +3,11 @@ from game_state import GameState
 
 class GameReplay:
     
-    def __init__(self, states = [], max_turns = 2000):
-        self.states = states
+    def __init__(self, filename = None, max_turns = 2000):
+        self.states = []
         self.max_turns = max_turns
+        if filename is not None:
+            self.load_game(filename)
     
     def get_states(self):
         return self.states
@@ -28,6 +30,7 @@ class GameReplay:
         try:
             input_file = open(filename, 'r')
         except IOError:
+            print('unable to load game replay')
             return
         try:
             data = json.load(input_file)
@@ -44,7 +47,3 @@ class GameReplay:
             input_file.close()
         except:
             input_file.close()
-    
-    # TODO    
-    def write_replay_vectors(self, filename):
-        return None
