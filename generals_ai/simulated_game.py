@@ -2,6 +2,7 @@ import json
 import numpy as np
 from player import Player
 from CNN_agent import CNNAgent
+from random_agent import RandomAgent
 from os import getenv, environ
 import random as rnd
 import math
@@ -17,8 +18,8 @@ class SimulatedGame():
         self.armies = []
         self.turn = 0
         self.initialize_randomly()
-        while not self.screen_map():
-            self.initialize_randomly()
+        #while not self.screen_map():
+        #    self.initialize_randomly()
 
     def initialize_randomly(self):
         num_players = 2
@@ -26,7 +27,7 @@ class SimulatedGame():
         height = 16 + num_players + round((rnd.random()**2) * (4 + (num_players / 2)))
         map_size = width * height
         self.map_dimensions = [height, width]
-        self.players = [CNNAgent(), CNNAgent()]
+        self.players = [RandomAgent(), RandomAgent()]
         self.cities = np.zeros(map_size)
         self.mountains = np.zeros(map_size)
         self.generals = np.zeros(map_size)
@@ -167,14 +168,28 @@ class SimulatedGame():
                         output_matrix[j][k] = 1
         return output_matrix
     
-    # TODO
     @staticmethod
     def get_diff(old_matrix, new_matrix):
-        old_array = np.array(old_matrix).flatten()
-        new_array = np.array(new_matrix).flatten()
+        old_array = np.array(old_matrix).flatten().tolist()
+        new_array = np.array(new_matrix).flatten().tolist()
         output = []
-        for i in range(new_array.size):
-            if i < new_array.size:
-                if i < old_array.size:
-                    
+        i = 0
+        while i < len(new_array):
+            matching = 0
+            while i < len(new_array) and i < len(old_array) and old_array[i] == new_array[i]:
+                matching += 1
+                i += 1
+            output.append(matching)
+            mismatching = []
+            while i < len(new_array):
+                if i >= len(old_array):
+                    mismatching.append(new_array[i])
+                    i += 1
+                elif old_array[i] != new_array[i]:
+                    mismatching.append(new_array[i])
+                    i += 1
+                else:
+                    break
+            output.append(len(mismatching))
+            output = output + mismatching       
         return output
